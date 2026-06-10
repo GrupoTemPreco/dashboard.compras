@@ -1,10 +1,18 @@
 import { useEffect, useRef, useState } from 'react';
 import { ChevronDown, Check } from 'lucide-react';
 import { theme } from '../utils/theme';
+import type { PeriodRange } from '../utils/period';
 import type { Classification, Group, Curve } from '../data/mockData';
-import { CLASSIFICATIONS, GROUPS, CURVES, MOCK_STORES } from '../data/mockData';
+import type { StoreData } from '../data/mockData';
+import PeriodFilter from './PeriodFilter';
 
 interface FilterPillsProps {
+  period: PeriodRange | null;
+  onPeriodApply: (value: PeriodRange | null) => void;
+  allStores?: StoreData[];
+  classificationOptions?: string[];
+  groupOptions?: string[];
+  curveCodes?: string[];
   classification: Classification | null;
   group: Group | null;
   storeId: string | null;
@@ -22,11 +30,17 @@ interface Option<T extends string> {
 }
 
 export default function FilterPills({
+  period,
+  onPeriodApply,
+  allStores = [],
+  classificationOptions = [],
+  groupOptions = [],
+  curveCodes = [],
   classification, group, storeId, curve,
   onClassificationChange, onGroupChange, onStoreChange, onCurveChange,
 }: FilterPillsProps) {
   const seen = new Set<string>();
-  const availableStores = MOCK_STORES.filter(s => {
+  const availableStores = allStores.filter(s => {
     if (group && s.group !== group) return false;
     if (classification && s.classification !== classification) return false;
     if (seen.has(s.baseId)) return false;
@@ -38,7 +52,7 @@ export default function FilterPills({
   if (group) {
     availableStores.forEach(s => storeOptions.push({ value: s.baseId, label: s.name }));
   } else {
-    GROUPS.forEach(g => {
+    groupOptions.forEach(g => {
       const inGroup = availableStores.filter(s => s.group === g);
       inGroup.forEach(s => storeOptions.push({ value: s.baseId, label: s.name, groupLabel: g }));
     });
@@ -46,12 +60,14 @@ export default function FilterPills({
 
   return (
     <div className="flex flex-wrap items-center gap-2">
+      <PeriodFilter value={period} onApply={onPeriodApply} />
+
       <Dropdown
         label="Classificação"
         value={classification}
         options={[
           { value: null, label: 'Todas' },
-          ...CLASSIFICATIONS.map(c => ({ value: c, label: c })),
+          ...classificationOptions.map(c => ({ value: c, label: c })),
         ]}
         onChange={onClassificationChange}
       />
@@ -61,7 +77,7 @@ export default function FilterPills({
         value={group}
         options={[
           { value: null, label: 'Todos' },
-          ...GROUPS.map(g => ({ value: g, label: g })),
+          ...groupOptions.map(g => ({ value: g, label: g })),
         ]}
         onChange={onGroupChange}
       />
@@ -78,7 +94,7 @@ export default function FilterPills({
         value={curve}
         options={[
           { value: null, label: 'Todas' },
-          ...CURVES.map(c => ({ value: c, label: c })),
+          ...curveCodes.map(c => ({ value: c, label: c })),
         ]}
         onChange={onCurveChange}
       />

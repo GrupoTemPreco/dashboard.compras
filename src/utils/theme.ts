@@ -42,11 +42,13 @@ export function daysColor(days: number): string {
 }
 
 export function curveColor(curve: string): string {
-  switch (curve) {
+  const c = curve.trim();
+  switch (c) {
     case 'A': return theme.curveA;
     case 'B': return theme.curveB;
     case 'C': return theme.curveC;
     case 'D': return theme.curveD;
+    case 'SC': return '#94a3b8';
     default: return theme.textSecondary;
   }
 }

@@ -1,7 +1,15 @@
 import { Calendar, TrendingUp } from 'lucide-react';
+import { getDaysInMonth, getElapsedSaleDaysInMonth, type PeriodRange } from '../utils/period';
 import { theme } from '../utils/theme';
 
-export default function FloatingWidget() {
+interface FloatingWidgetProps {
+  period: PeriodRange;
+}
+
+export default function FloatingWidget({ period }: FloatingWidgetProps) {
+  const diasDoMes = getDaysInMonth(period);
+  const diasDeVenda = getElapsedSaleDaysInMonth(period);
+
   return (
     <div
       className="fixed top-4 right-4 z-50 flex items-center gap-3 px-5 py-2.5 rounded-full backdrop-blur-sm"
@@ -17,7 +25,7 @@ export default function FloatingWidget() {
           Dias do mês:
         </span>
         <span className="text-sm font-bold tabular-nums" style={{ color: theme.textPrimary }}>
-          31
+          {diasDoMes}
         </span>
       </div>
       <div style={{ width: 1, height: 18, backgroundColor: theme.border }} />
@@ -27,7 +35,7 @@ export default function FloatingWidget() {
           Dias de venda:
         </span>
         <span className="text-sm font-bold tabular-nums" style={{ color: theme.green }}>
-          18
+          {diasDeVenda}
         </span>
       </div>
     </div>
