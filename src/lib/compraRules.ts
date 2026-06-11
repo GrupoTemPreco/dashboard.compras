@@ -72,7 +72,7 @@ export function computeCompraMesColuna(
   compraMesNaoFaturadoConfirmado: number,
 ): number {
   if (usesCompraFaturadoMaisConfirmado(classificacaoCodigo)) {
-    return compraMesFaturado + compraMesNaoFaturadoConfirmado;
+    return compraMesFaturado;
   }
   return compraMesNaoFaturadoTotal;
 }

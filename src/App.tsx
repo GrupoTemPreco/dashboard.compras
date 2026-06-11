@@ -9,7 +9,14 @@ import {
   type PeriodRange,
 } from './utils/period';
 import { fetchDashboardCatalog } from './lib/fetchDashboardCatalog';
-import type { Classification, Curve, Group, StoreData } from './data/mockData';
+import { fetchLastImportAt } from './lib/fetchLastImportAt';
+import type {
+  ClassificationFilter,
+  CurveFilter,
+  Group,
+  StoreData,
+  StoreIdFilter,
+} from './data/mockData';
 import FloatingWidget from './components/FloatingWidget';
 import KpiCards from './components/KpiCards';
 import FilterPills from './components/FilterPills';
@@ -23,13 +30,14 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [diasDoMes, setDiasDoMes] = useState(() => getDaysInMonth(resolvePeriod(null)));
   const [diasDeVenda, setDiasDeVenda] = useState(() => getElapsedSaleDaysInMonth(resolvePeriod(null)));
+  const [lastImportAt, setLastImportAt] = useState<string | null>(null);
 
   const [period, setPeriod] = useState<PeriodRange | null>(null);
 
-  const [classification, setClassification] = useState<Classification | null>(null);
+  const [classification, setClassification] = useState<ClassificationFilter>(null);
   const [group, setGroup] = useState<Group | null>(null);
-  const [storeId, setStoreId] = useState<string | null>(null);
-  const [curve, setCurve] = useState<Curve | null>(null);
+  const [storeId, setStoreId] = useState<StoreIdFilter>(null);
+  const [curve, setCurve] = useState<CurveFilter>(null);
 
   const effectivePeriod = useMemo(() => resolvePeriod(period), [period]);
 
@@ -53,6 +61,16 @@ export default function App() {
     };
   }, [effectivePeriod]);
 
+  useEffect(() => {
+    let cancelled = false;
+    fetchLastImportAt().then(at => {
+      if (!cancelled) setLastImportAt(at);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const groupOptions = useMemo(
     () => [...new Set(stores.map(s => s.group))].sort((a, b) => a.localeCompare(b, 'pt-BR')),
     [stores],
@@ -63,7 +81,7 @@ export default function App() {
     setStoreId(null);
   };
 
-  const handleClassificationChange = (newCls: Classification | null) => {
+  const handleClassificationChange = (newCls: ClassificationFilter) => {
     setClassification(newCls);
     setStoreId(null);
   };
@@ -75,7 +93,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen" style={{ backgroundColor: theme.bg }}>
-      <FloatingWidget period={effectivePeriod} />
+      <FloatingWidget period={effectivePeriod} lastImportAt={lastImportAt} />
 
       <div className="max-w-[1680px] mx-auto px-6 py-6">
         <div className="flex items-center gap-3 mb-6">
@@ -90,7 +108,7 @@ export default function App() {
               Dashboard de Compras
             </h1>
             <p className="text-xs" style={{ color: theme.textSecondary }}>
-              Rede de Farmácias — Controle de compras por classificação, grupo e curva
+              Grupo Tempreço — Controle de compras por classificação, grupo e curva
             </p>
           </div>
         </div>

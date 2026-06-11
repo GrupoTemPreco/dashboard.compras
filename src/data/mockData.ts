@@ -3,6 +3,11 @@ export type Classification = string;
 export type Group = string;
 export type Curve = string;
 
+/** Filtros multi-select — `null` = todas/todos. */
+export type ClassificationFilter = Classification[] | null;
+export type StoreIdFilter = string[] | null;
+export type CurveFilter = Curve[] | null;
+
 export interface EstoqueData {
   estoqueAtualUnid: number;
   custo: number;

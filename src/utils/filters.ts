@@ -1,13 +1,19 @@
 import { weightedCmvPercent } from '../lib/aggregateMetrics';
-import type { StoreData, Classification, Group, Curve } from '../data/mockData';
+import type {
+  StoreData,
+  Group,
+  ClassificationFilter,
+  StoreIdFilter,
+  CurveFilter,
+} from '../data/mockData';
 import type { PeriodRange } from './period';
 
 export interface FilterState {
   period: PeriodRange | null;
-  classification: Classification | null;
+  classification: ClassificationFilter;
   group: Group | null;
-  storeId: string | null;
-  curve: Curve | null;
+  storeId: StoreIdFilter;
+  curve: CurveFilter;
 }
 
 export function applyFilters(
@@ -16,14 +22,14 @@ export function applyFilters(
 ): StoreData[] {
   const { classification, group, storeId, curve } = filters;
   let stores = source;
-  if (classification) stores = stores.filter(s => s.classification === classification);
+  if (classification?.length) stores = stores.filter(s => classification.includes(s.classification));
   if (group) stores = stores.filter(s => s.group === group);
-  if (storeId) stores = stores.filter(s => s.baseId === storeId);
-  if (!curve) return stores;
+  if (storeId?.length) stores = stores.filter(s => storeId.includes(s.baseId));
+  if (!curve?.length) return stores;
 
   return stores
     .map(s => {
-      const curves = s.curves.filter(c => c.curve === curve);
+      const curves = s.curves.filter(c => curve.includes(c.curve));
       if (curves.length === 0) return null;
 
       const agg = curves.reduce(

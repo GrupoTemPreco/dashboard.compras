@@ -61,6 +61,14 @@ export function formatDateBr(iso: string): string {
   return `${d}/${m}/${y}`;
 }
 
+/** Exibe data/hora literal do ISO — importado_em já é horário de Brasília (mesmo com +00:00 no banco). */
+export function formatDateTimeBr(iso: string): string {
+  const m = iso.trim().match(/^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})/);
+  if (!m) return iso;
+  const [, year, month, day, hour, minute] = m;
+  return `${day}/${month}/${year.slice(-2)} às ${hour}:${minute}`;
+}
+
 export function isValidPeriod(range: PeriodRange): boolean {
   if (!range.start || !range.end) return false;
   return range.start <= range.end;
