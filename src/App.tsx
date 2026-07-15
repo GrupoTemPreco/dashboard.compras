@@ -1,5 +1,5 @@
-import { useState, useMemo, useEffect } from 'react';
-import { ShoppingBag } from 'lucide-react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
+import { CalendarClock, ShoppingBag } from 'lucide-react';
 import { theme } from './utils/theme';
 import { applyFilters } from './utils/filters';
 import {
@@ -20,7 +20,13 @@ import type {
 import FloatingWidget from './components/FloatingWidget';
 import KpiCards from './components/KpiCards';
 import FilterPills from './components/FilterPills';
-import AccordionTable from './components/AccordionTable';
+import AccordionTable, {
+  type ComprasDetalheOpenPayload,
+} from './components/AccordionTable';
+import AjusteMesPedidosModal from './components/ajusteMes/AjusteMesPedidosModal';
+import ComprasPedidosModal, {
+  type ComprasDetalheTarget,
+} from './components/comprasDetalhe/ComprasPedidosModal';
 
 export default function App() {
   const [stores, setStores] = useState<StoreData[]>([]);
@@ -31,6 +37,9 @@ export default function App() {
   const [diasDoMes, setDiasDoMes] = useState(() => getDaysInMonth(resolvePeriod(null)));
   const [diasDeVenda, setDiasDeVenda] = useState(() => getElapsedSaleDaysInMonth(resolvePeriod(null)));
   const [lastImportAt, setLastImportAt] = useState<string | null>(null);
+  const [catalogTick, setCatalogTick] = useState(0);
+  const [ajusteMesOpen, setAjusteMesOpen] = useState(false);
+  const [comprasDetalhe, setComprasDetalhe] = useState<ComprasDetalheTarget | null>(null);
 
   const [period, setPeriod] = useState<PeriodRange | null>(null);
 
@@ -40,6 +49,10 @@ export default function App() {
   const [curve, setCurve] = useState<CurveFilter>(null);
 
   const effectivePeriod = useMemo(() => resolvePeriod(period), [period]);
+
+  const refetchCatalog = useCallback(() => {
+    setCatalogTick(t => t + 1);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -59,7 +72,7 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [effectivePeriod]);
+  }, [effectivePeriod, catalogTick]);
 
   useEffect(() => {
     let cancelled = false;
@@ -89,6 +102,31 @@ export default function App() {
   const filteredStores = useMemo(
     () => applyFilters({ period: effectivePeriod, classification, group, storeId, curve }, stores),
     [effectivePeriod, classification, group, storeId, curve, stores],
+  );
+
+  /** Lojas/grupo respeitados; curva ignorada (Compras = todas as curvas). */
+  const storesForComprasDetalhe = useMemo(
+    () => applyFilters({ period: effectivePeriod, classification, group, storeId, curve: null }, stores),
+    [effectivePeriod, classification, group, storeId, stores],
+  );
+
+  const handleOpenComprasDetalhe = useCallback(
+    (payload: ComprasDetalheOpenPayload) => {
+      const clsStores = storesForComprasDetalhe.filter(
+        s => s.classificationCodigo === payload.classificacaoCodigo,
+      );
+      const comprasEsperado = clsStores.reduce((s, st) => s + st.compraMes, 0);
+      const allowedLojaIds = [
+        ...new Set(clsStores.map(s => Number(s.baseId)).filter(n => !Number.isNaN(n))),
+      ];
+      setComprasDetalhe({
+        classificacaoCodigo: payload.classificacaoCodigo,
+        classificacaoNome: payload.classificacaoNome,
+        comprasEsperado,
+        allowedLojaIds,
+      });
+    },
+    [storesForComprasDetalhe],
   );
 
   return (
@@ -143,6 +181,19 @@ export default function App() {
             onStoreChange={setStoreId}
             onCurveChange={setCurve}
           />
+          <button
+            type="button"
+            onClick={() => setAjusteMesOpen(true)}
+            className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-full transition-colors hover:bg-white/5"
+            style={{
+              color: theme.textPrimary,
+              border: `1px solid ${theme.border}`,
+              backgroundColor: theme.card,
+            }}
+          >
+            <CalendarClock size={14} style={{ color: theme.accent }} />
+            Ajustar mês de pedidos
+          </button>
         </div>
 
         <div className="mt-5">
@@ -151,9 +202,23 @@ export default function App() {
             classificationOrder={classificationOrder}
             diasDoMes={diasDoMes}
             diasDeVenda={diasDeVenda}
+            onOpenComprasDetalhe={handleOpenComprasDetalhe}
           />
         </div>
       </div>
+
+      <AjusteMesPedidosModal
+        open={ajusteMesOpen}
+        onClose={() => setAjusteMesOpen(false)}
+        onSaved={refetchCatalog}
+      />
+
+      <ComprasPedidosModal
+        open={comprasDetalhe != null}
+        target={comprasDetalhe}
+        period={effectivePeriod}
+        onClose={() => setComprasDetalhe(null)}
+      />
     </div>
   );
 }

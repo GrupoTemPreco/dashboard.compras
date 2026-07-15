@@ -18,6 +18,16 @@ export function formatCurrency(value: number): string {
   return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 0, maximumFractionDigits: 0 });
 }
 
+/** Moeda com centavos (ex.: modal de ajuste). */
+export function formatCurrencyExact(value: number): string {
+  return value.toLocaleString('pt-BR', {
+    style: 'currency',
+    currency: 'BRL',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+}
+
 export function formatPercent(value: number): string {
   return `${value.toFixed(1)}%`;
 }

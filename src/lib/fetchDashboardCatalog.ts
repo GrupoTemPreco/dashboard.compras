@@ -9,7 +9,6 @@ import { weightedCmvPercent, emptyComprasTotals, computeDerivedCompraFields } fr
 import {
   getDaysInMonth,
   getElapsedSaleDaysInMonth,
-  getPreviousMonthPeriod,
   type PeriodRange,
 } from '../utils/period';
 import type { CurveData, EstoqueData, StoreData } from '../data/mockData';
@@ -55,8 +54,7 @@ type PedidoRow = {
   curva: string;
   status: string | null;
   valor: number | null;
-  data: string | null;
-  prazo: number | null;
+  mes_referencia_final: string | null;
 };
 
 type EstoqueRow = {
@@ -122,14 +120,13 @@ function buildEstoqueSnapshotMap(rows: EstoqueRow[]): Map<string, EstoqueRow> {
 function buildPedidosSnapshotMaps(rows: PedidoRow[], period: PeriodRange): PedidosSnapshotMaps {
   const total = new Map<string, number>();
   const confirmado = new Map<string, number>();
-  const previousPeriod = getPreviousMonthPeriod(period);
 
   for (const row of rows) {
     const cls = normalizeCode(row.classificacao);
     const curva = normalizeCurve(row.curva);
     if (!cls || !curva) continue;
 
-    if (!pedidoContaNoKpiNaoFaturado(row, cls, period, previousPeriod)) continue;
+    if (!pedidoContaNoKpiNaoFaturado(row, cls, period)) continue;
 
     const key = curveKey(row.id_loja, cls, curva);
     const valor = Number(row.valor) || 0;
@@ -153,13 +150,12 @@ function buildKpiCompraMesNaoFaturadoByStore(
   period: PeriodRange,
 ): Map<string, number> {
   const totals = new Map<string, number>();
-  const previousPeriod = getPreviousMonthPeriod(period);
 
   for (const row of rows) {
     const cls = normalizeCode(row.classificacao);
     if (!cls) continue;
 
-    if (!pedidoContaNoKpiNaoFaturado(row, cls, period, previousPeriod)) continue;
+    if (!pedidoContaNoKpiNaoFaturado(row, cls, period)) continue;
 
     const key = storeKey(row.id_loja, cls);
     const valor = Number(row.valor) || 0;
@@ -263,8 +259,8 @@ export async function fetchDashboardCatalog(period: PeriodRange): Promise<{
       data: r.rows.sort((a, b) => String(a.nome).localeCompare(String(b.nome), 'pt-BR')),
       error: r.error,
     })),
-    fetchAllRowsSnapshot<{ codigo: string }>('curvas', 'codigo'),
-    fetchAllRowsSnapshot<LojaRow>('lojas', 'id_loja, company_code, grupo'),
+    fetchAllRowsSnapshot<{ codigo: string }>('curvas', 'codigo', 'codigo'),
+    fetchAllRowsSnapshot<LojaRow>('lojas', 'id_loja, company_code, grupo', 'id_loja'),
   ]);
 
   if (clsRes.error) warnings.push(`Classificações: ${clsRes.error.message}`);
@@ -302,8 +298,16 @@ export async function fetchDashboardCatalog(period: PeriodRange): Promise<{
       'id_loja, classificacao, curva, valor',
     ),
     fetchAllRowsSnapshot<PedidoRow>(
-      'pedidos_nao_faturados',
-      'id_loja, classificacao, curva, status, valor, data, prazo',
+      'pedidos_nao_faturados_view',
+      'id_loja, classificacao, curva, status, valor, mes_referencia_final',
+      [
+        'id_loja',
+        'classificacao',
+        'curva',
+        'status',
+        'prazo',
+        'mes_referencia_final',
+      ],
     ),
     fetchAllRowsSnapshot<EstoqueRow>(
       'estoque',
@@ -319,14 +323,13 @@ export async function fetchDashboardCatalog(period: PeriodRange): Promise<{
   const estoqueSnapshot = buildEstoqueSnapshotMap(estoqueRes.rows);
   const pedidosMaps = buildPedidosSnapshotMaps(pedidosRes.rows, period);
   const kpiCompraMesNaoFaturadoByStore = buildKpiCompraMesNaoFaturadoByStore(pedidosRes.rows, period);
-  const previousPeriod = getPreviousMonthPeriod(period);
 
   for (const row of pedidosRes.rows) {
     const cls = normalizeCode(row.classificacao);
     const curva = normalizeCurve(row.curva);
     if (!cls || !curva) continue;
 
-    if (!pedidoContaNoKpiNaoFaturado(row, cls, period, previousPeriod)) continue;
+    if (!pedidoContaNoKpiNaoFaturado(row, cls, period)) continue;
 
     const bucket = getOrCreateCurveBucket(curveBuckets, row.id_loja, cls, curva);
     const valor = Number(row.valor) || 0;

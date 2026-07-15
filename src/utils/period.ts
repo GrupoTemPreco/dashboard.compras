@@ -74,11 +74,28 @@ export function isValidPeriod(range: PeriodRange): boolean {
   return range.start <= range.end;
 }
 
-/** Mês calendário imediatamente anterior ao de `period.start`. */
-export function getPreviousMonthPeriod(period: PeriodRange): PeriodRange {
-  const [y, m] = period.start.split('-').map(Number);
-  const ref = new Date(y, m - 1, 1);
-  const prevStart = new Date(ref.getFullYear(), ref.getMonth() - 1, 1);
-  const prevEnd = new Date(ref.getFullYear(), ref.getMonth(), 0);
-  return { start: toIsoDate(prevStart), end: toIsoDate(prevEnd) };
+/** Normaliza ISO date/datetime para o 1º dia do mês (`YYYY-MM-01`). */
+export function toFirstOfMonthIso(iso: string): string {
+  const m = iso.trim().match(/^(\d{4})-(\d{2})/);
+  if (!m) return iso.trim().slice(0, 10);
+  return `${m[1]}-${m[2]}-01`;
+}
+
+/** Soma (ou subtrai) meses a uma data ISO; resultado sempre no 1º dia. */
+export function addMonthsIso(iso: string, deltaMonths: number): string {
+  const base = toFirstOfMonthIso(iso);
+  const [y, m] = base.split('-').map(Number);
+  const d = new Date(y, m - 1 + deltaMonths, 1);
+  return toIsoDate(d);
+}
+
+/** Label curto de mês: `jul/2026`. */
+export function formatMesCurto(iso: string): string {
+  const base = toFirstOfMonthIso(iso);
+  const [y, m] = base.split('-').map(Number);
+  const label = new Date(y, m - 1, 1).toLocaleDateString('pt-BR', {
+    month: 'short',
+    year: 'numeric',
+  });
+  return label.replace(/\s*de\s*/i, '/').replace(/\./g, '').replace(/\s+/g, '').toLowerCase();
 }

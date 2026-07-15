@@ -1,19 +1,28 @@
 import { useState, useMemo } from 'react';
-import { ChevronRight, ChevronDown } from 'lucide-react';
+import { ChevronRight, ChevronDown, List } from 'lucide-react';
 import {
   comprasTotalsFromStores,
   cmvRoundedForCalculo,
   computeCmvLimiteFromAgregado,
   type ComprasTotals,
 } from '../lib/aggregateMetrics';
+import { usesRegraPrazoMesAnterior } from '../lib/compraRules';
 import { theme, formatCurrency, formatPercent, valueColor, cmvColor, curveColor, daysColor, situationDot } from '../utils/theme';
 import type { StoreData, CurveData } from '../data/mockData';
+
+export type ComprasDetalheOpenPayload = {
+  classificacaoCodigo: string;
+  classificacaoNome: string;
+  comprasEsperado: number;
+  allowedLojaIds: number[];
+};
 
 interface AccordionTableProps {
   stores: StoreData[];
   classificationOrder?: string[];
   diasDoMes: number;
   diasDeVenda: number;
+  onOpenComprasDetalhe?: (payload: ComprasDetalheOpenPayload) => void;
 }
 
 function buildDisplayTotals(
@@ -57,6 +66,7 @@ export default function AccordionTable({
   classificationOrder = [],
   diasDoMes,
   diasDeVenda,
+  onOpenComprasDetalhe,
 }: AccordionTableProps) {
   const [expandedCls, setExpandedCls] = useState<Set<string>>(new Set());
   const [expandedStores, setExpandedStores] = useState<Set<string>>(new Set());
@@ -127,6 +137,11 @@ export default function AccordionTable({
         const clsIdeal = cmvRoundedForCalculo(clsTotals.cmv);
         const dotColor = situationDot(clsTotals.cmv, clsIdeal);
         const isExpanded = expandedCls.has(cls);
+        const clsCodigo = clsStores[0]?.classificationCodigo ?? '';
+        const showComprasDetalhe =
+          Boolean(onOpenComprasDetalhe) &&
+          clsStores.length > 0 &&
+          usesRegraPrazoMesAnterior(clsCodigo);
 
         return (
           <div key={cls}>
@@ -143,8 +158,30 @@ export default function AccordionTable({
                 {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
               </span>
               <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: dotColor }} />
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 min-w-0">
                 <span className="font-semibold text-sm" style={{ color: theme.textPrimary }}>{cls}</span>
+                {showComprasDetalhe && (
+                  <button
+                    type="button"
+                    title="Ver pedidos de Compras"
+                    aria-label={`Ver pedidos de Compras de ${cls}`}
+                    className="inline-flex items-center justify-center p-1 rounded hover:bg-white/10"
+                    style={{ color: theme.accent }}
+                    onClick={e => {
+                      e.stopPropagation();
+                      onOpenComprasDetalhe?.({
+                        classificacaoCodigo: clsCodigo,
+                        classificacaoNome: cls,
+                        comprasEsperado: clsDisplayTotals.compraMes,
+                        allowedLojaIds: [
+                          ...new Set(clsStores.map(s => Number(s.baseId)).filter(n => !Number.isNaN(n))),
+                        ],
+                      });
+                    }}
+                  >
+                    <List size={14} />
+                  </button>
+                )}
                 <span
                   className="text-[10px] px-1.5 py-0.5 rounded"
                   style={{ backgroundColor: `${theme.textSecondary}15`, color: theme.textSecondary }}
