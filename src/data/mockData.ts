@@ -43,6 +43,8 @@ export interface StoreData {
   vendaMes: number;
   compraMesFaturado: number;
   compraMesNaoFaturado: number;
+  /** Soma de ajustes_manuais_compras no período (loja+classificação). */
+  compraMesAjuste: number;
   compraMes: number;
   cmv: number;
   vendaProjetada: number;

@@ -1,22 +1,29 @@
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import { theme, formatCurrencyExact } from '../../utils/theme';
-import type { PedidoBreakdownRow, PedidoListaRow } from '../../lib/ajusteMes/fetchPedidosAjuste';
+import type {
+  PedidoBreakdownRow,
+  PedidoListaRow,
+} from '../../lib/pedidosModal/fetchPedidosModalSnapshot';
+import { formatLojaLabel } from '../../lib/lojas';
 import { formatDateBr, formatMesCurto, toFirstOfMonthIso } from '../../utils/period';
 import MesReferenciaSelect from './MesReferenciaSelect';
 
-function statusBadgeStyle(status: string | null): { color: string; backgroundColor: string; border: string } {
+function statusBadgeStyle(status: string | null): {
+  color: string;
+  backgroundColor: string;
+  border: string;
+} {
   const key = (status ?? '').trim().toLowerCase();
   const color =
     key === 'confirmado'
-      ? '#f97316' // laranja
+      ? '#f97316'
       : key === 'recebido'
-        ? '#22d3ee' // ciano
+        ? '#22d3ee'
         : key === 'desistido'
-          ? '#ef4444' // vermelho
+          ? '#ef4444'
           : key === 'recebido parcialmente'
-            ? '#f472b6' // rosa
+            ? '#f472b6'
             : theme.textSecondary;
-
   return {
     color,
     backgroundColor: `${color}18`,
@@ -24,7 +31,7 @@ function statusBadgeStyle(status: string | null): { color: string; backgroundCol
   };
 }
 
-interface PedidoAjusteRowProps {
+interface PedidosModalRowProps {
   pedido: PedidoListaRow;
   expanded: boolean;
   loadingBreakdown: boolean;
@@ -34,7 +41,7 @@ interface PedidoAjusteRowProps {
   onMesChange: (mesIso: string, baselineIso: string) => void;
 }
 
-export default function PedidoAjusteRow({
+export default function PedidosModalRow({
   pedido,
   expanded,
   loadingBreakdown,
@@ -42,11 +49,11 @@ export default function PedidoAjusteRow({
   pendingMes,
   onToggle,
   onMesChange,
-}: PedidoAjusteRowProps) {
+}: PedidosModalRowProps) {
   const baseline =
     breakdown?.find(r => r.editavel)?.mes_referencia_final ??
     breakdown?.[0]?.mes_referencia_final ??
-    '';
+    pedido.mes_referencia_final;
   const showAjustado = Boolean(pendingMes) || pedido.tem_ajuste;
 
   return (
@@ -90,11 +97,14 @@ export default function PedidoAjusteRow({
             {pedido.fornecedor || '—'}
           </span>
           <span className="text-xs tabular-nums" style={{ color: theme.textSecondary }}>
-            Loja {pedido.id_loja}
+            {formatLojaLabel(pedido.company_code)}
             {pedido.prazo != null ? ` · Prazo ${pedido.prazo} dias` : ''}
           </span>
         </div>
-        <span className="text-sm font-medium tabular-nums flex-shrink-0" style={{ color: theme.textPrimary }}>
+        <span
+          className="text-sm font-medium tabular-nums flex-shrink-0"
+          style={{ color: theme.textPrimary }}
+        >
           {formatCurrencyExact(pedido.valor_total)}
         </span>
       </button>
@@ -130,9 +140,7 @@ export default function PedidoAjusteRow({
                 <span className="text-right">Mês referência</span>
               </div>
               {breakdown.map(row => {
-                const displayMes = toFirstOfMonthIso(
-                  pendingMes ?? row.mes_referencia_final,
-                );
+                const displayMes = toFirstOfMonthIso(pendingMes ?? row.mes_referencia_final);
                 return (
                   <div
                     key={`${row.classificacao}|${row.prazo}|${row.mes_referencia_calculado}`}

@@ -1,27 +1,49 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { X } from 'lucide-react';
-import { theme } from '../../utils/theme';
+import { theme, formatCurrencyExact } from '../../utils/theme';
+import { formatPeriodLabel, toFirstOfMonthIso, type PeriodRange } from '../../utils/period';
 import {
   fetchPedidoBreakdown,
-  fetchPedidosListaAjuste,
+  fetchPedidosModalSnapshot,
   type PedidoBreakdownRow,
   type PedidoListaRow,
-} from '../../lib/ajusteMes/fetchPedidosAjuste';
-import { saveAjustesMes } from '../../lib/ajusteMes/saveAjustesMes';
-import { toFirstOfMonthIso } from '../../utils/period';
-import PedidoAjusteList from './PedidoAjusteList';
+} from '../../lib/pedidosModal/fetchPedidosModalSnapshot';
+import { filterPedidosModal } from '../../lib/pedidosModal/filterPedidosModal';
+import { saveAjustesMes } from '../../lib/pedidosModal/saveAjustesMes';
+import PedidosModalList from './PedidosModalList';
 
-interface AjusteMesPedidosModalProps {
+export type PedidosModalOpenContext = {
+  /** null = Perfumaria + Oficinais */
+  classificacaoCodigo: 'PERFUMARIA' | 'OFICINAIS' | null;
+  classificacaoNome?: string;
+  /** default do toggle; botão geral força true e esconde o controle */
+  verTodosDefault: boolean;
+  /** false no botão geral — toggle oculto e travado em true */
+  allowToggleVerTodos: boolean;
+  period: PeriodRange;
+  /** null = todas as lojas */
+  allowedLojaIds: number[] | null;
+  /** só para conferência com Compras quando !verTodos */
+  comprasEsperado: number | null;
+};
+
+interface PedidosUnificadoModalProps {
   open: boolean;
+  context: PedidosModalOpenContext | null;
   onClose: () => void;
-  /** Chamado após upsert bem-sucedido (ex.: refetch do dashboard). */
   onSaved?: () => void;
 }
 
-export default function AjusteMesPedidosModal({ open, onClose, onSaved }: AjusteMesPedidosModalProps) {
-  const [pedidos, setPedidos] = useState<PedidoListaRow[]>([]);
+export default function PedidosUnificadoModal({
+  open,
+  context,
+  onClose,
+  onSaved,
+}: PedidosUnificadoModalProps) {
+  const [snapshot, setSnapshot] = useState<PedidoListaRow[]>([]);
   const [search, setSearch] = useState('');
-  const [expandedCodigo, setExpandedCodigo] = useState<string | null>(null);
+  const [verTodos, setVerTodos] = useState(true);
+  const [expandedKey, setExpandedKey] = useState<string | null>(null);
   const [breakdownByCodigo, setBreakdownByCodigo] = useState<Map<string, PedidoBreakdownRow[]>>(
     () => new Map(),
   );
@@ -35,29 +57,65 @@ export default function AjusteMesPedidosModal({ open, onClose, onSaved }: Ajuste
 
   const pendingCount = pending.size;
 
-  const loadLista = useCallback(async () => {
+  const loadSnapshot = useCallback(async () => {
     setLoading(true);
     setLoadError(null);
-    const r = await fetchPedidosListaAjuste();
+    const r = await fetchPedidosModalSnapshot();
     if (r.error) {
       setLoadError(r.error.message);
-      setPedidos([]);
+      setSnapshot([]);
     } else {
-      setPedidos(r.pedidos);
+      setSnapshot(r.pedidos);
     }
     setLoading(false);
   }, []);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open || !context) return;
     setSearch('');
-    setExpandedCodigo(null);
+    setExpandedKey(null);
     setBreakdownByCodigo(new Map());
     setPending(new Map());
     setSaveError(null);
     setConfirmCloseOpen(false);
-    void loadLista();
-  }, [open, loadLista]);
+    setVerTodos(context.allowToggleVerTodos ? context.verTodosDefault : true);
+    void loadSnapshot();
+  }, [open, context, loadSnapshot]);
+
+  const effectiveVerTodos = context?.allowToggleVerTodos === false ? true : verTodos;
+
+  const pedidosVisiveis = useMemo(() => {
+    if (!context) return [];
+    return filterPedidosModal(snapshot, {
+      classificacaoCodigo: context.classificacaoCodigo,
+      allowedLojaIds: context.allowedLojaIds,
+      verTodos: effectiveVerTodos,
+      period: context.period,
+    });
+  }, [snapshot, context, effectiveVerTodos]);
+
+  const totalVisivel = useMemo(
+    () =>
+      pedidosVisiveis.reduce(
+        (s, p) =>
+          s +
+          (context?.classificacaoCodigo != null
+            ? p.valor_classificacao_contexto
+            : p.valor_total),
+        0,
+      ),
+    [pedidosVisiveis, context?.classificacaoCodigo],
+  );
+
+  const showTotalConferencia = Boolean(context && !effectiveVerTodos);
+  const diverge =
+    showTotalConferencia &&
+    context?.comprasEsperado != null &&
+    Math.abs(totalVisivel - context.comprasEsperado) > 0.015;
+
+  const title = context?.classificacaoNome
+    ? `Pedidos · ${context.classificacaoNome}`
+    : 'Pedidos · Perfumaria e Oficinais';
 
   const requestClose = () => {
     if (pending.size > 0) {
@@ -89,7 +147,7 @@ export default function AjusteMesPedidosModal({ open, onClose, onSaved }: Ajuste
     }
     setPending(new Map());
     setBreakdownByCodigo(new Map());
-    await loadLista();
+    await loadSnapshot();
     onSaved?.();
     return true;
   };
@@ -101,12 +159,12 @@ export default function AjusteMesPedidosModal({ open, onClose, onSaved }: Ajuste
     if (alsoClose) onClose();
   };
 
-  const handleToggle = async (codigo: string) => {
-    if (expandedCodigo === codigo) {
-      setExpandedCodigo(null);
+  const handleToggle = async (rowKey: string, codigo: string) => {
+    if (expandedKey === rowKey) {
+      setExpandedKey(null);
       return;
     }
-    setExpandedCodigo(codigo);
+    setExpandedKey(rowKey);
     if (breakdownByCodigo.has(codigo)) return;
 
     setLoadingBreakdownCodigo(codigo);
@@ -134,7 +192,7 @@ export default function AjusteMesPedidosModal({ open, onClose, onSaved }: Ajuste
     });
   };
 
-  if (!open) return null;
+  if (!open || !context) return null;
 
   return (
     <div
@@ -145,7 +203,7 @@ export default function AjusteMesPedidosModal({ open, onClose, onSaved }: Ajuste
       }}
     >
       <div
-        className="w-full max-w-4xl flex flex-col rounded-xl overflow-hidden shadow-2xl"
+        className="w-full max-w-5xl flex flex-col rounded-xl overflow-hidden shadow-2xl"
         style={{
           backgroundColor: theme.card,
           border: `1px solid ${theme.border}`,
@@ -154,18 +212,24 @@ export default function AjusteMesPedidosModal({ open, onClose, onSaved }: Ajuste
         }}
         role="dialog"
         aria-modal="true"
-        aria-labelledby="ajuste-mes-title"
+        aria-labelledby="pedidos-modal-title"
       >
         <header
           className="flex items-start justify-between gap-3 px-5 py-4 flex-shrink-0"
           style={{ borderBottom: `1px solid ${theme.border}` }}
         >
           <div>
-            <h2 id="ajuste-mes-title" className="text-lg font-bold" style={{ color: theme.textPrimary }}>
-              Ajustar mês de referência
+            <h2
+              id="pedidos-modal-title"
+              className="text-lg font-bold"
+              style={{ color: theme.textPrimary }}
+            >
+              {title}
             </h2>
             <p className="text-xs mt-1" style={{ color: theme.textSecondary }}>
-              Edições só em Perfumaria/Oficinais. Alterações ficam pendentes até confirmar.
+              {effectiveVerTodos
+                ? 'Todos os pedidos (sem filtro de período). Edições em Perfumaria/Oficinais ficam pendentes até confirmar.'
+                : `Pedidos que entram em Compras — ${formatPeriodLabel(context.period)}`}
             </p>
           </div>
           <button
@@ -181,9 +245,27 @@ export default function AjusteMesPedidosModal({ open, onClose, onSaved }: Ajuste
         {(loadError || saveError) && (
           <p
             className="text-xs px-5 py-2 flex-shrink-0"
-            style={{ backgroundColor: '#3f1f25', color: '#fca5a5', borderBottom: '1px solid #7f1d1d' }}
+            style={{
+              backgroundColor: '#3f1f25',
+              color: '#fca5a5',
+              borderBottom: '1px solid #7f1d1d',
+            }}
           >
             {loadError || saveError}
+          </p>
+        )}
+
+        {diverge && (
+          <p
+            className="text-xs px-5 py-2 flex-shrink-0"
+            style={{
+              backgroundColor: `${theme.yellow}12`,
+              color: theme.yellow,
+              borderBottom: `1px solid ${theme.yellow}40`,
+            }}
+          >
+            Total do detalhe ({formatCurrencyExact(totalVisivel)}) difere de Compras na tabela (
+            {formatCurrencyExact(context.comprasEsperado ?? 0)}).
           </p>
         )}
 
@@ -194,11 +276,14 @@ export default function AjusteMesPedidosModal({ open, onClose, onSaved }: Ajuste
             </p>
           </div>
         ) : (
-          <PedidoAjusteList
-            pedidos={pedidos}
+          <PedidosModalList
+            pedidos={pedidosVisiveis}
+            showVerTodosToggle={context.allowToggleVerTodos}
+            verTodos={verTodos}
+            onVerTodosChange={setVerTodos}
             search={search}
             onSearchChange={setSearch}
-            expandedCodigo={expandedCodigo}
+            expandedKey={expandedKey}
             loadingBreakdownCodigo={loadingBreakdownCodigo}
             breakdownByCodigo={breakdownByCodigo}
             pending={pending}
@@ -211,11 +296,18 @@ export default function AjusteMesPedidosModal({ open, onClose, onSaved }: Ajuste
           className="flex flex-wrap items-center justify-between gap-3 px-5 py-3 flex-shrink-0"
           style={{ borderTop: `1px solid ${theme.border}` }}
         >
-          <p className="text-xs" style={{ color: theme.textSecondary }}>
-            {pendingCount === 0
-              ? 'Nenhuma alteração pendente'
-              : `${pendingCount} alteração${pendingCount === 1 ? '' : 'ões'} pendente${pendingCount === 1 ? '' : 's'}`}
-          </p>
+          <div className="space-y-0.5">
+            <p className="text-xs" style={{ color: theme.textSecondary }}>
+              {pendingCount === 0
+                ? 'Nenhuma alteração pendente'
+                : `${pendingCount} alteração${pendingCount === 1 ? '' : 'ões'} pendente${pendingCount === 1 ? '' : 's'}`}
+            </p>
+            {showTotalConferencia && (
+              <p className="text-sm font-semibold tabular-nums" style={{ color: theme.textPrimary }}>
+                Total {formatCurrencyExact(totalVisivel)}
+              </p>
+            )}
+          </div>
           <button
             type="button"
             disabled={pendingCount === 0 || saving}
@@ -239,7 +331,11 @@ export default function AjusteMesPedidosModal({ open, onClose, onSaved }: Ajuste
             role="alertdialog"
             aria-labelledby="discard-title"
           >
-            <h3 id="discard-title" className="text-base font-bold mb-2" style={{ color: theme.textPrimary }}>
+            <h3
+              id="discard-title"
+              className="text-base font-bold mb-2"
+              style={{ color: theme.textPrimary }}
+            >
               Descartar alterações?
             </h3>
             <p className="text-sm mb-5" style={{ color: theme.textSecondary }}>

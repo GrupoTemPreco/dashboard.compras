@@ -6,6 +6,8 @@ import {
 } from './compraRules';
 import { fetchAllRowsInPeriod, fetchAllRowsSnapshot } from './fetchRows';
 import { weightedCmvPercent, emptyComprasTotals, computeDerivedCompraFields } from './aggregateMetrics';
+import { fetchLojasPorId, formatLojaLabel } from './lojas';
+import { fetchAjustesManuaisByStore } from './ajustesManuais/fetchAjustesManuaisPeriodo';
 import {
   getDaysInMonth,
   getElapsedSaleDaysInMonth,
@@ -30,8 +32,6 @@ function storeKey(idLoja: number, classificacao: string): string {
 }
 
 type ClassificacaoRow = { id?: number; codigo: string; nome: string };
-
-type LojaRow = { id_loja: number; company_code: string | null; grupo: string | null };
 
 type VendaRow = {
   id_loja: number;
@@ -260,7 +260,7 @@ export async function fetchDashboardCatalog(period: PeriodRange): Promise<{
       error: r.error,
     })),
     fetchAllRowsSnapshot<{ codigo: string }>('curvas', 'codigo', 'codigo'),
-    fetchAllRowsSnapshot<LojaRow>('lojas', 'id_loja, company_code, grupo', 'id_loja'),
+    fetchLojasPorId(),
   ]);
 
   if (clsRes.error) warnings.push(`Classificações: ${clsRes.error.message}`);
@@ -278,15 +278,12 @@ export async function fetchDashboardCatalog(period: PeriodRange): Promise<{
     .filter(c => c !== '')
     .sort((a, b) => a.localeCompare(b, 'pt-BR'));
 
-  const lojasPorId = new Map<number, LojaRow>();
-  for (const loja of lojasRes.rows ?? []) {
-    lojasPorId.set(loja.id_loja, loja);
-  }
+  const lojasPorId = lojasRes.byId;
 
   const curveBuckets = new Map<string, CurveBucket>();
   const storePairs = new Set<string>();
 
-  const [vendasRes, comprasRes, pedidosRes, estoqueRes] = await Promise.all([
+  const [vendasRes, comprasRes, pedidosRes, estoqueRes, ajustesRes] = await Promise.all([
     fetchAllRowsInPeriod<VendaRow>(
       'vendas',
       period,
@@ -313,12 +310,19 @@ export async function fetchDashboardCatalog(period: PeriodRange): Promise<{
       'estoque',
       'id_loja, classificacao, curva, data, estoque_unid, custo, participacao',
     ),
+    fetchAjustesManuaisByStore(period),
   ]);
 
   if (vendasRes.error) warnings.push(vendasRes.error.message);
   if (comprasRes.error) warnings.push(comprasRes.error.message);
   if (pedidosRes.error) warnings.push(pedidosRes.error.message);
   if (estoqueRes.error) warnings.push(estoqueRes.error.message);
+  if (ajustesRes.error) warnings.push(ajustesRes.error.message);
+
+  const ajustesByStore = ajustesRes.byStore;
+  for (const key of ajustesByStore.keys()) {
+    storePairs.add(key);
+  }
 
   const estoqueSnapshot = buildEstoqueSnapshotMap(estoqueRes.rows);
   const pedidosMaps = buildPedidosSnapshotMaps(pedidosRes.rows, period);
@@ -375,8 +379,7 @@ export async function fetchDashboardCatalog(period: PeriodRange): Promise<{
     const classificationNome = nomePorCodigo.get(clsCodigo) ?? clsCodigo;
     const loja = lojasPorId.get(idLoja);
 
-    const companyCode = loja?.company_code?.trim() ?? '';
-    const displayName = companyCode ? `Loja ${companyCode}` : 'Loja —';
+    const displayName = formatLojaLabel(loja?.company_code);
     const grupo = loja?.grupo?.trim() ?? 'Sem grupo';
 
     const curves: CurveData[] = curveCodes.map(code =>
@@ -394,8 +397,18 @@ export async function fetchDashboardCatalog(period: PeriodRange): Promise<{
 
     const compraMesFaturado = curves.reduce((s, c) => s + c.compraMesFaturado, 0);
     const compraMesNaoFaturado = kpiCompraMesNaoFaturadoByStore.get(storeKey(idLoja, clsCodigo)) ?? 0;
-    const compraMes = curves.reduce((s, c) => s + c.compraMes, 0);
+    const compraMesBase = curves.reduce((s, c) => s + c.compraMes, 0);
+    const compraMesAjuste = ajustesByStore.get(storeKey(idLoja, clsCodigo)) ?? 0;
+    const compraMes = compraMesBase + compraMesAjuste;
     const vendaMes = curves.reduce((s, c) => s + c.vendaMes, 0);
+    const cmv = weightedCmvPercent(curves);
+    const derived = computeDerivedCompraFields(
+      vendaMes,
+      compraMes,
+      cmv,
+      diasDoMes,
+      diasDeVenda,
+    );
 
     stores.push({
       id: `${idLoja}_${clsCodigo}`,
@@ -407,15 +420,16 @@ export async function fetchDashboardCatalog(period: PeriodRange): Promise<{
       vendaMes,
       compraMesFaturado,
       compraMesNaoFaturado,
+      compraMesAjuste,
       compraMes,
-      cmv: weightedCmvPercent(curves),
-      vendaProjetada: curves.reduce((s, c) => s + c.vendaProjetada, 0),
-      limiteCompra: curves.reduce((s, c) => s + c.limiteCompra, 0),
-      saldoCompra: curves.reduce((s, c) => s + c.saldoCompra, 0),
-      cmvIdealVendaAtual: curves.reduce((s, c) => s + c.cmvIdealVendaAtual, 0),
-      cmvProjetado: curves.reduce((s, c) => s + c.cmvProjetado, 0),
-      diferencaCompraIdeal: curves.reduce((s, c) => s + c.diferencaCompraIdeal, 0),
-      projecaoCompraIdeal: curves.reduce((s, c) => s + c.projecaoCompraIdeal, 0),
+      cmv,
+      vendaProjetada: derived.vendaProjetada,
+      limiteCompra: derived.limiteCompra,
+      saldoCompra: derived.saldoCompra,
+      cmvIdealVendaAtual: derived.cmvIdealVendaAtual,
+      cmvProjetado: derived.cmvProjetado,
+      diferencaCompraIdeal: derived.diferencaCompraIdeal,
+      projecaoCompraIdeal: derived.projecaoCompraIdeal,
       curves,
     });
   }

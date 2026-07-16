@@ -1,35 +1,46 @@
 import { useMemo, useState } from 'react';
 import { ArrowDownWideNarrow, ArrowUpNarrowWide } from 'lucide-react';
 import { theme } from '../../utils/theme';
-import type { PedidoBreakdownRow, PedidoListaRow } from '../../lib/ajusteMes/fetchPedidosAjuste';
-import PedidoAjusteRow from './PedidoAjusteRow';
+import type {
+  PedidoBreakdownRow,
+  PedidoListaRow,
+} from '../../lib/pedidosModal/fetchPedidosModalSnapshot';
+import { pedidoListaRowKey } from '../../lib/pedidosModal/fetchPedidosModalSnapshot';
+import PedidosModalRow from './PedidosModalRow';
 
-interface PedidoAjusteListProps {
+interface PedidosModalListProps {
   pedidos: PedidoListaRow[];
+  showVerTodosToggle: boolean;
+  verTodos: boolean;
+  onVerTodosChange: (v: boolean) => void;
   search: string;
   onSearchChange: (v: string) => void;
-  expandedCodigo: string | null;
+  expandedKey: string | null;
   loadingBreakdownCodigo: string | null;
   breakdownByCodigo: Map<string, PedidoBreakdownRow[]>;
   pending: Map<string, string>;
-  onToggle: (codigo: string) => void;
+  onToggle: (rowKey: string, codigo: string) => void;
   onMesChange: (codigo: string, mesIso: string, baselineIso: string) => void;
 }
 
 type SortDataDir = 'desc' | 'asc';
 
-export default function PedidoAjusteList({
+export default function PedidosModalList({
   pedidos,
+  showVerTodosToggle,
+  verTodos,
+  onVerTodosChange,
   search,
   onSearchChange,
-  expandedCodigo,
+  expandedKey,
   loadingBreakdownCodigo,
   breakdownByCodigo,
   pending,
   onToggle,
   onMesChange,
-}: PedidoAjusteListProps) {
-  const [filterData, setFilterData] = useState('');
+}: PedidosModalListProps) {
+  const [filterDataDe, setFilterDataDe] = useState('');
+  const [filterDataAte, setFilterDataAte] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
   const [sortDataDir, setSortDataDir] = useState<SortDataDir>('desc');
 
@@ -43,7 +54,8 @@ export default function PedidoAjusteList({
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    const dataFiltro = filterData.trim();
+    const dataDe = filterDataDe.trim();
+    const dataAte = filterDataAte.trim();
     const statusFiltro = filterStatus.trim();
 
     let rows = pedidos.filter(p => {
@@ -53,7 +65,12 @@ export default function PedidoAjusteList({
           p.fornecedor.toLowerCase().includes(q);
         if (!hit) return false;
       }
-      if (dataFiltro && (p.data ?? '') !== dataFiltro) return false;
+      if (dataDe || dataAte) {
+        const d = p.data ?? '';
+        if (!d) return false;
+        if (dataDe && d < dataDe) return false;
+        if (dataAte && d > dataAte) return false;
+      }
       if (statusFiltro && (p.status ?? '') !== statusFiltro) return false;
       return true;
     });
@@ -68,7 +85,7 @@ export default function PedidoAjusteList({
     });
 
     return rows;
-  }, [pedidos, search, filterData, filterStatus, sortDataDir]);
+  }, [pedidos, search, filterDataDe, filterDataAte, filterStatus, sortDataDir]);
 
   const inputStyle = {
     backgroundColor: theme.bg,
@@ -78,7 +95,10 @@ export default function PedidoAjusteList({
 
   return (
     <div className="flex flex-col min-h-0 flex-1">
-      <div className="px-4 py-3 flex-shrink-0 space-y-2" style={{ borderBottom: `1px solid ${theme.border}` }}>
+      <div
+        className="px-4 py-3 flex-shrink-0 space-y-2"
+        style={{ borderBottom: `1px solid ${theme.border}` }}
+      >
         <input
           type="search"
           value={search}
@@ -89,16 +109,31 @@ export default function PedidoAjusteList({
         />
 
         <div className="flex flex-wrap items-center gap-2">
-          <label className="flex items-center gap-1.5 text-xs" style={{ color: theme.textSecondary }}>
-            Data
-            <input
-              type="date"
-              value={filterData}
-              onChange={e => setFilterData(e.target.value)}
-              className="text-xs rounded-md px-2 py-1.5 outline-none"
-              style={inputStyle}
-            />
-          </label>
+          <div
+            className="flex items-center gap-1.5 text-xs"
+            style={{ color: theme.textSecondary }}
+          >
+            <label className="flex items-center gap-1">
+              De
+              <input
+                type="date"
+                value={filterDataDe}
+                onChange={e => setFilterDataDe(e.target.value)}
+                className="text-xs rounded-md px-2 py-1.5 outline-none"
+                style={inputStyle}
+              />
+            </label>
+            <label className="flex items-center gap-1">
+              Até
+              <input
+                type="date"
+                value={filterDataAte}
+                onChange={e => setFilterDataAte(e.target.value)}
+                className="text-xs rounded-md px-2 py-1.5 outline-none"
+                style={inputStyle}
+              />
+            </label>
+          </div>
 
           <label className="flex items-center gap-1.5 text-xs" style={{ color: theme.textSecondary }}>
             Status
@@ -131,11 +166,40 @@ export default function PedidoAjusteList({
             )}
             {sortDataDir === 'desc' ? 'Data ↓' : 'Data ↑'}
           </button>
+
+          {showVerTodosToggle && (
+            <label
+              className="ml-auto inline-flex items-center gap-2 text-xs cursor-pointer select-none"
+              style={{ color: theme.textSecondary }}
+              title="Inclui pedidos fora do período selecionado no dashboard"
+            >
+              <span>Ver todos os pedidos</span>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={verTodos}
+                onClick={() => onVerTodosChange(!verTodos)}
+                className="relative w-9 h-5 rounded-full transition-colors"
+                style={{
+                  backgroundColor: verTodos ? theme.accent : theme.border,
+                }}
+              >
+                <span
+                  className="absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform"
+                  style={{
+                    transform: verTodos ? 'translateX(1rem)' : 'translateX(0)',
+                  }}
+                />
+              </button>
+            </label>
+          )}
         </div>
 
         <p className="text-[11px]" style={{ color: theme.textSecondary }}>
           {filtered.length} pedido{filtered.length === 1 ? '' : 's'}
-          {search.trim() || filterData || filterStatus ? ' encontrado(s)' : ''}
+          {search.trim() || filterDataDe || filterDataAte || filterStatus
+            ? ' encontrado(s)'
+            : ''}
         </p>
       </div>
 
@@ -145,18 +209,21 @@ export default function PedidoAjusteList({
             Nenhum pedido encontrado.
           </p>
         ) : (
-          filtered.map(p => (
-            <PedidoAjusteRow
-              key={`${p.id_loja}|${p.codigo_pedido}|${p.fornecedor}|${p.prazo ?? ''}|${p.data ?? ''}`}
-              pedido={p}
-              expanded={expandedCodigo === p.codigo_pedido}
-              loadingBreakdown={loadingBreakdownCodigo === p.codigo_pedido}
-              breakdown={breakdownByCodigo.get(p.codigo_pedido)}
-              pendingMes={pending.get(p.codigo_pedido)}
-              onToggle={() => onToggle(p.codigo_pedido)}
-              onMesChange={(mes, baseline) => onMesChange(p.codigo_pedido, mes, baseline)}
-            />
-          ))
+          filtered.map(p => {
+            const rowKey = pedidoListaRowKey(p);
+            return (
+              <PedidosModalRow
+                key={rowKey}
+                pedido={p}
+                expanded={expandedKey === rowKey}
+                loadingBreakdown={loadingBreakdownCodigo === p.codigo_pedido}
+                breakdown={breakdownByCodigo.get(p.codigo_pedido)}
+                pendingMes={pending.get(p.codigo_pedido)}
+                onToggle={() => onToggle(rowKey, p.codigo_pedido)}
+                onMesChange={(mes, baseline) => onMesChange(p.codigo_pedido, mes, baseline)}
+              />
+            );
+          })
         )}
       </div>
     </div>

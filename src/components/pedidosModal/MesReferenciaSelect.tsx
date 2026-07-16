@@ -1,11 +1,9 @@
 import { theme } from '../../utils/theme';
-import { buildMesReferenciaOptions } from '../../lib/ajusteMes/mesReferenciaOptions';
+import { buildMesReferenciaOptions } from '../../lib/pedidosModal/mesReferenciaOptions';
 import { toFirstOfMonthIso } from '../../utils/period';
 
 interface MesReferenciaSelectProps {
-  /** Mês vigente da linha (âncora das 3 opções). */
   vigenteIso: string;
-  /** Valor selecionado (pode ser pending do pedido). */
   value: string;
   disabled?: boolean;
   onChange: (mesIso: string) => void;

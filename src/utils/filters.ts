@@ -1,4 +1,4 @@
-import { weightedCmvPercent } from '../lib/aggregateMetrics';
+import { weightedCmvPercent, computeDerivedCompraFields } from '../lib/aggregateMetrics';
 import type {
   StoreData,
   Group,
@@ -7,6 +7,7 @@ import type {
   CurveFilter,
 } from '../data/mockData';
 import type { PeriodRange } from './period';
+import { getDaysInMonth, getElapsedSaleDaysInMonth, resolvePeriod } from './period';
 
 export interface FilterState {
   period: PeriodRange | null;
@@ -20,12 +21,16 @@ export function applyFilters(
   filters: FilterState,
   source: StoreData[] = [],
 ): StoreData[] {
-  const { classification, group, storeId, curve } = filters;
+  const { classification, group, storeId, curve, period } = filters;
   let stores = source;
   if (classification?.length) stores = stores.filter(s => classification.includes(s.classification));
   if (group) stores = stores.filter(s => s.group === group);
   if (storeId?.length) stores = stores.filter(s => storeId.includes(s.baseId));
   if (!curve?.length) return stores;
+
+  const effectivePeriod = resolvePeriod(period);
+  const diasDoMes = getDaysInMonth(effectivePeriod);
+  const diasDeVenda = getElapsedSaleDaysInMonth(effectivePeriod);
 
   return stores
     .map(s => {
@@ -39,11 +44,8 @@ export function applyFilters(
           compraMes: acc.compraMes + c.compraMes,
           vendaProjetada: acc.vendaProjetada + c.vendaProjetada,
           limiteCompra: acc.limiteCompra + c.limiteCompra,
-          saldoCompra: acc.saldoCompra + c.saldoCompra,
           cmvIdealVendaAtual: acc.cmvIdealVendaAtual + c.cmvIdealVendaAtual,
           cmvProjetado: acc.cmvProjetado + c.cmvProjetado,
-          diferencaCompraIdeal: acc.diferencaCompraIdeal + c.diferencaCompraIdeal,
-          projecaoCompraIdeal: acc.projecaoCompraIdeal + c.projecaoCompraIdeal,
         }),
         {
           vendaMes: 0,
@@ -51,27 +53,36 @@ export function applyFilters(
           compraMes: 0,
           vendaProjetada: 0,
           limiteCompra: 0,
-          saldoCompra: 0,
           cmvIdealVendaAtual: 0,
           cmvProjetado: 0,
-          diferencaCompraIdeal: 0,
-          projecaoCompraIdeal: 0,
         },
+      );
+
+      const compraMesAjuste = s.compraMesAjuste ?? 0;
+      const compraMes = agg.compraMes + compraMesAjuste;
+      const cmv = weightedCmvPercent(curves);
+      const derived = computeDerivedCompraFields(
+        agg.vendaMes,
+        compraMes,
+        cmv,
+        diasDoMes,
+        diasDeVenda,
       );
 
       const view: StoreData = {
         ...s,
         vendaMes: agg.vendaMes,
         compraMesFaturado: agg.compraMesFaturado,
-        compraMes: agg.compraMes,
-        cmv: weightedCmvPercent(curves),
-        vendaProjetada: agg.vendaProjetada,
-        limiteCompra: agg.limiteCompra,
-        saldoCompra: agg.saldoCompra,
-        cmvIdealVendaAtual: agg.cmvIdealVendaAtual,
-        cmvProjetado: agg.cmvProjetado,
-        diferencaCompraIdeal: agg.diferencaCompraIdeal,
-        projecaoCompraIdeal: agg.projecaoCompraIdeal,
+        compraMesAjuste,
+        compraMes,
+        cmv,
+        vendaProjetada: derived.vendaProjetada,
+        limiteCompra: derived.limiteCompra,
+        saldoCompra: derived.saldoCompra,
+        cmvIdealVendaAtual: derived.cmvIdealVendaAtual,
+        cmvProjetado: derived.cmvProjetado,
+        diferencaCompraIdeal: derived.diferencaCompraIdeal,
+        projecaoCompraIdeal: derived.projecaoCompraIdeal,
         curves,
       };
       return view;

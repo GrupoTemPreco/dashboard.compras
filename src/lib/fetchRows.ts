@@ -22,6 +22,7 @@ export async function fetchAllRowsInPeriod<T>(
   period: { start: string; end: string },
   select: string,
   orderBy: OrderBy = 'id',
+  dateColumn: string = 'data',
 ): Promise<{ rows: T[]; error: { message: string } | null }> {
   const rows: T[] = [];
   let from = 0;
@@ -31,8 +32,8 @@ export async function fetchAllRowsInPeriod<T>(
       supabase
         .from(table)
         .select(select)
-        .gte('data', period.start)
-        .lte('data', period.end),
+        .gte(dateColumn, period.start)
+        .lte(dateColumn, period.end),
       orderBy,
     ).range(from, from + PAGE_SIZE - 1);
 

@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useCallback } from 'react';
-import { CalendarClock, ShoppingBag } from 'lucide-react';
+import { CalendarClock, PencilLine, ShoppingBag } from 'lucide-react';
 import { theme } from './utils/theme';
 import { applyFilters } from './utils/filters';
 import {
@@ -23,10 +23,18 @@ import FilterPills from './components/FilterPills';
 import AccordionTable, {
   type ComprasDetalheOpenPayload,
 } from './components/AccordionTable';
-import AjusteMesPedidosModal from './components/ajusteMes/AjusteMesPedidosModal';
-import ComprasPedidosModal, {
-  type ComprasDetalheTarget,
-} from './components/comprasDetalhe/ComprasPedidosModal';
+import PedidosUnificadoModal, {
+  type PedidosModalOpenContext,
+} from './components/pedidosModal/PedidosUnificadoModal';
+import AjustesManuaisModal from './components/ajustesManuais/AjustesManuaisModal';
+
+function toClassificacaoCodigo(
+  codigo: string,
+): 'PERFUMARIA' | 'OFICINAIS' | null {
+  const c = codigo.trim().toUpperCase();
+  if (c === 'PERFUMARIA' || c === 'OFICINAIS') return c;
+  return null;
+}
 
 export default function App() {
   const [stores, setStores] = useState<StoreData[]>([]);
@@ -38,8 +46,8 @@ export default function App() {
   const [diasDeVenda, setDiasDeVenda] = useState(() => getElapsedSaleDaysInMonth(resolvePeriod(null)));
   const [lastImportAt, setLastImportAt] = useState<string | null>(null);
   const [catalogTick, setCatalogTick] = useState(0);
-  const [ajusteMesOpen, setAjusteMesOpen] = useState(false);
-  const [comprasDetalhe, setComprasDetalhe] = useState<ComprasDetalheTarget | null>(null);
+  const [pedidosModal, setPedidosModal] = useState<PedidosModalOpenContext | null>(null);
+  const [ajustesManuaisOpen, setAjustesManuaisOpen] = useState(false);
 
   const [period, setPeriod] = useState<PeriodRange | null>(null);
 
@@ -110,8 +118,22 @@ export default function App() {
     [effectivePeriod, classification, group, storeId, stores],
   );
 
+  const openAjusteGeral = useCallback(() => {
+    setPedidosModal({
+      classificacaoCodigo: null,
+      verTodosDefault: true,
+      allowToggleVerTodos: false,
+      period: effectivePeriod,
+      allowedLojaIds: null,
+      comprasEsperado: null,
+    });
+  }, [effectivePeriod]);
+
   const handleOpenComprasDetalhe = useCallback(
     (payload: ComprasDetalheOpenPayload) => {
+      const clsCodigo = toClassificacaoCodigo(payload.classificacaoCodigo);
+      if (!clsCodigo) return;
+
       const clsStores = storesForComprasDetalhe.filter(
         s => s.classificationCodigo === payload.classificacaoCodigo,
       );
@@ -119,14 +141,18 @@ export default function App() {
       const allowedLojaIds = [
         ...new Set(clsStores.map(s => Number(s.baseId)).filter(n => !Number.isNaN(n))),
       ];
-      setComprasDetalhe({
-        classificacaoCodigo: payload.classificacaoCodigo,
+
+      setPedidosModal({
+        classificacaoCodigo: clsCodigo,
         classificacaoNome: payload.classificacaoNome,
-        comprasEsperado,
+        verTodosDefault: false,
+        allowToggleVerTodos: true,
+        period: effectivePeriod,
         allowedLojaIds,
+        comprasEsperado,
       });
     },
-    [storesForComprasDetalhe],
+    [storesForComprasDetalhe, effectivePeriod],
   );
 
   return (
@@ -183,7 +209,7 @@ export default function App() {
           />
           <button
             type="button"
-            onClick={() => setAjusteMesOpen(true)}
+            onClick={openAjusteGeral}
             className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-full transition-colors hover:bg-white/5"
             style={{
               color: theme.textPrimary,
@@ -193,6 +219,19 @@ export default function App() {
           >
             <CalendarClock size={14} style={{ color: theme.accent }} />
             Ajustar mês de pedidos
+          </button>
+          <button
+            type="button"
+            onClick={() => setAjustesManuaisOpen(true)}
+            className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-full transition-colors hover:bg-white/5"
+            style={{
+              color: theme.textPrimary,
+              border: `1px solid ${theme.border}`,
+              backgroundColor: theme.card,
+            }}
+          >
+            <PencilLine size={14} style={{ color: theme.accent }} />
+            Ajustes manuais de compras
           </button>
         </div>
 
@@ -207,17 +246,17 @@ export default function App() {
         </div>
       </div>
 
-      <AjusteMesPedidosModal
-        open={ajusteMesOpen}
-        onClose={() => setAjusteMesOpen(false)}
+      <PedidosUnificadoModal
+        open={pedidosModal != null}
+        context={pedidosModal}
+        onClose={() => setPedidosModal(null)}
         onSaved={refetchCatalog}
       />
 
-      <ComprasPedidosModal
-        open={comprasDetalhe != null}
-        target={comprasDetalhe}
-        period={effectivePeriod}
-        onClose={() => setComprasDetalhe(null)}
+      <AjustesManuaisModal
+        open={ajustesManuaisOpen}
+        onClose={() => setAjustesManuaisOpen(false)}
+        onSaved={refetchCatalog}
       />
     </div>
   );

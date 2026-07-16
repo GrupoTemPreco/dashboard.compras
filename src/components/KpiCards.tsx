@@ -33,7 +33,8 @@ function computeKpis(stores: StoreData[]): Kpi[] {
 function CompraMesCard({ stores }: { stores: StoreData[] }) {
   const faturado = stores.reduce((s, st) => s + st.compraMesFaturado, 0);
   const naoFaturado = stores.reduce((s, st) => s + st.compraMesNaoFaturado, 0);
-  const total = faturado + naoFaturado;
+  const ajustes = stores.reduce((s, st) => s + (st.compraMesAjuste ?? 0), 0);
+  const total = stores.reduce((s, st) => s + st.compraMes, 0);
 
   return (
     <div
@@ -63,6 +64,20 @@ function CompraMesCard({ stores }: { stores: StoreData[] }) {
             {formatCurrency(naoFaturado)}
           </span>
         </div>
+        {ajustes !== 0 && (
+          <div className="flex items-baseline justify-between gap-2">
+            <span className="text-[10px]" style={{ color: theme.textSecondary }}>
+              Ajustes
+            </span>
+            <span
+              className="text-sm font-semibold tabular-nums"
+              style={{ color: ajustes > 0 ? theme.green : theme.red }}
+            >
+              {ajustes > 0 ? '+' : ''}
+              {formatCurrency(ajustes)}
+            </span>
+          </div>
+        )}
       </div>
       <p
         className="mt-2 pt-2 text-xs font-medium tabular-nums border-t"

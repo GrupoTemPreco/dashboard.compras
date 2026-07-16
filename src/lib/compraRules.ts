@@ -50,7 +50,7 @@ export function computeCompraMesColuna(
   classificacaoCodigo: string,
   compraMesFaturado: number,
   compraMesNaoFaturadoTotal: number,
-  compraMesNaoFaturadoConfirmado: number,
+  _compraMesNaoFaturadoConfirmado: number,
 ): number {
   if (usesCompraFaturadoMaisConfirmado(classificacaoCodigo)) {
     return compraMesFaturado;
