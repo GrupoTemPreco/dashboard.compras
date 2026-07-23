@@ -1,5 +1,4 @@
 import { theme } from '../../utils/theme';
-import { buildMesReferenciaOptions } from '../../lib/pedidosModal/mesReferenciaOptions';
 import { toFirstOfMonthIso } from '../../utils/period';
 
 interface MesReferenciaSelectProps {
@@ -9,27 +8,30 @@ interface MesReferenciaSelectProps {
   onChange: (mesIso: string) => void;
 }
 
+/** Converte ISO (yyyy-mm-dd) → valor de <input type="month"> (yyyy-mm). */
+function toMonthInputValue(iso: string): string {
+  const m = iso.trim().match(/^(\d{4})-(\d{2})/);
+  return m ? `${m[1]}-${m[2]}` : '';
+}
+
 export default function MesReferenciaSelect({
-  vigenteIso,
   value,
   disabled,
   onChange,
 }: MesReferenciaSelectProps) {
-  const vigente = toFirstOfMonthIso(vigenteIso);
   const selected = toFirstOfMonthIso(value);
-  const options = buildMesReferenciaOptions(vigente);
-  if (!options.some(o => o.value === selected)) {
-    options.push({
-      value: selected,
-      label: buildMesReferenciaOptions(selected)[1]?.label ?? selected,
-    });
-  }
+  const monthValue = toMonthInputValue(selected);
 
   return (
-    <select
-      value={selected}
+    <input
+      type="month"
+      value={monthValue}
       disabled={disabled}
-      onChange={e => onChange(e.target.value)}
+      onChange={e => {
+        const ym = e.target.value.trim();
+        if (!ym) return;
+        onChange(toFirstOfMonthIso(`${ym}-01`));
+      }}
       className="text-xs rounded-md px-2 py-1.5 outline-none cursor-pointer"
       style={{
         backgroundColor: theme.bg,
@@ -37,12 +39,6 @@ export default function MesReferenciaSelect({
         border: `1px solid ${theme.border}`,
         minWidth: '7.5rem',
       }}
-    >
-      {options.map(o => (
-        <option key={o.value} value={o.value}>
-          {o.label}
-        </option>
-      ))}
-    </select>
+    />
   );
 }

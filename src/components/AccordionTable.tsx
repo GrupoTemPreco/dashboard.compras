@@ -84,10 +84,28 @@ export default function AccordionTable({
         ? [...classificationOrder]
         : [...byCls.keys()].sort((a, b) => a.localeCompare(b, 'pt-BR'));
 
-    return names.map(classification => ({
-      classification,
-      stores: byCls.get(classification) ?? [],
-    }));
+    const isEmptyMetric = (v: number | undefined) => (Number(v) || 0) === 0;
+
+    return names
+      .map(classification => ({
+        classification,
+        stores: byCls.get(classification) ?? [],
+      }))
+      .filter(({ stores: clsStores }) => {
+        const t = comprasTotalsFromStores(clsStores);
+        return !(
+          isEmptyMetric(t.vendaMes) &&
+          isEmptyMetric(t.compraMes) &&
+          isEmptyMetric(t.cmv) &&
+          isEmptyMetric(t.vendaProjetada) &&
+          isEmptyMetric(t.limiteCompra) &&
+          isEmptyMetric(t.saldoCompra) &&
+          isEmptyMetric(t.cmvIdealVendaAtual) &&
+          isEmptyMetric(t.cmvProjetado) &&
+          isEmptyMetric(t.diferencaCompraIdeal) &&
+          isEmptyMetric(t.projecaoCompraIdeal)
+        );
+      });
   }, [stores, classificationOrder]);
 
   const toggleCls = (cls: string) => {
